@@ -1,0 +1,37 @@
+body, html {
+    height: 100%;
+    margin: 0;
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #eee;
+}
+
+#game {
+    width: 600px;
+    height: 200px;
+    border: 1px solid black;
+    position: relative;
+    overflow: hidden;
+}
+
+#dino {
+    width: 40px;
+    height: 60px;
+    background: url('trump.png') no-repeat center;
+    background-size: cover;
+    position: absolute;
+    bottom: 10px;
+    left: 50px;
+}
+
+#obstacle {
+    width: 30px;
+    height: 60px;
+    background: url('biden.png') no-repeat center;
+    background-size: cover;
+    position: absolute;
+    bottom: 10px;
+    right: 0;
+}
