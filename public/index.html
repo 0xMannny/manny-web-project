@@ -2,15 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dino Game</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Multiplayer Square Game</title>
+    <script src="/socket.io/socket.io.js"></script>
 </head>
-<body>
-    <div id="game">
-        <div id="dino"></div>
-        <div id="obstacle"></div>
-    </div>
+<body onload="init();">
+    <canvas id="gameCanvas" width="1400" height="800"></canvas>
     <script src="game.js"></script>
 </body>
 </html>

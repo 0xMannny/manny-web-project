@@ -1,66 +1,197 @@
-const dino = document.getElementById('dino');
-const obstacle = document.getElementById('obstacle');
-let isJumping = false;
-let obstacleInterval;
+const canvas = document.getElementById('gameCanvas');
+const context = canvas.getContext('2d');
 
-document.addEventListener('keydown', function (event) {
-    if (event.code === 'Space' && !isJumping) {
-        jump();
+const players = {};
+const bullets = [];
+const socket = io.connect('http://localhost:3000');
+
+let isDead = false;
+let mousePos = { x: 0, y: 0 };
+
+const movement = {
+    up: false,
+    down: false,
+    left: false,
+    right: false
+};
+
+socket.on('currentPlayers', (currentPlayers) => {
+    Object.assign(players, currentPlayers);
+    drawAllPlayers();
+});
+
+socket.on('newPlayer', (playerData) => {
+    players[playerData.id] = playerData;
+    drawAllPlayers();
+});
+
+socket.on('playerMoved', (data) => {
+    players[data.id] = data;
+    drawAllPlayers();
+});
+
+socket.on('playerDisconnected', (id) => {
+    delete players[id];
+    drawAllPlayers();
+});
+
+socket.on('bulletShot', (bullet) => {
+    bullets.push(bullet);
+});
+
+document.addEventListener('keydown', (event) => {
+    switch (event.key) {
+        case 'ArrowUp':
+        case 'W':
+        case 'w':
+            movement.up = true;
+            break;
+        case 'ArrowDown':
+        case 'S':
+        case 's':
+            movement.down = true;
+            break;
+        case 'ArrowLeft':
+        case 'A':
+        case 'a':
+            movement.left = true;
+            break;
+        case 'ArrowRight':
+        case 'D':
+        case 'd':
+            movement.right = true;
+            break;
+        case 'R':
+        case 'r':
+            if (isDead) {
+                isDead = false;
+                socket.emit('respawn');
+                init();
+            }
+            break;
     }
 });
 
-function jump() {
-    isJumping = true;
-    let jumpCount = 0;
-    const jumpInterval = setInterval(() => {
-        // Changed the range of jumpCount to 40 (doubled from 20) for a higher jump.
-        if (jumpCount > 40) {
-            clearInterval(jumpInterval);
-            let fallCount = jumpCount;
-            const fallInterval = setInterval(() => {
-                if (fallCount < 0) {
-                    clearInterval(fallInterval);
-                    isJumping = false;
-                } else {
-                    // Adjust the downward movement to -6px (doubled from -3px).
-                    dino.style.bottom = (fallCount * 3) + 'px';
-                    fallCount--;
+document.addEventListener('keyup', (event) => {
+    switch (event.key) {
+        case 'ArrowUp':
+        case 'W':
+        case 'w':
+            movement.up = false;
+            break;
+        case 'ArrowDown':
+        case 'S':
+        case 's':
+            movement.down = false;
+            break;
+        case 'ArrowLeft':
+        case 'A':
+        case 'a':
+            movement.left = false;
+            break;
+        case 'ArrowRight':
+        case 'D':
+        case 'd':
+            movement.right = false;
+            break;
+    }
+});
+
+canvas.addEventListener('mousedown', shoot);
+canvas.addEventListener('mousemove', (event) => {
+    mousePos.x = event.clientX;
+    mousePos.y = event.clientY;
+});
+
+function shoot() {
+    if (!isDead) {
+        const myPlayer = players[socket.id];
+        const dx = mousePos.x - myPlayer.x;
+        const dy = mousePos.y - myPlayer.y;
+        const magnitude = Math.sqrt(dx * dx + dy * dy);
+
+        const bullet = {
+            x: myPlayer.x,
+            y: myPlayer.y,
+            dx: (dx / magnitude) * 5,
+            dy: (dy / magnitude) * 5,
+            owner: socket.id
+        };
+
+        bullets.push(bullet);
+        socket.emit('bulletShot', bullet);
+    }
+}
+
+function update() {
+    const speed = 5;
+    const myPlayer = players[socket.id];
+    if (!myPlayer) return;
+
+    if (movement.up) myPlayer.y -= speed;
+    if (movement.down) myPlayer.y += speed;
+    if (movement.left) myPlayer.x -= speed;
+    if (movement.right) myPlayer.x += speed;
+
+    // Update bullet positions
+    bullets.forEach((bullet, index) => {
+        bullet.x += bullet.dx;
+        bullet.y += bullet.dy;
+
+        for (let id in players) {
+            const player = players[id];
+            if (bullet.owner !== id && isColliding(bullet, player)) {
+                if (socket.id === id) {
+                    displayDeathScreen();
                 }
-            }, 10);
-        } else {
-            // Adjust the upward movement to 6px (doubled from 3px).
-            dino.style.bottom = (jumpCount * 3) + 'px';
-            jumpCount++;
+                socket.emit('playerHit', id);
+                bullets.splice(index, 1);
+            }
         }
-    }, 10);
+    });
+
+    socket.emit('playerMovement', { x: myPlayer.x, y: myPlayer.y });
+    drawAllPlayers();
+
+    requestAnimationFrame(update);
 }
 
-function moveObstacle() {
-    const obstaclePosition = parseInt(window.getComputedStyle(obstacle).right);
-    obstacle.style.right = obstaclePosition + 2 + 'px';
+function isColliding(bullet, player) {
+    const dist = Math.sqrt((bullet.x - player.x) ** 2 + (bullet.y - player.y) ** 2);
+    return dist <= 25;
+}
 
-    if (obstaclePosition > 600) {
-        obstacle.style.right = '0px';
+function displayDeathScreen() {
+    isDead = true;
+    context.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = 'red';
+    context.font = '30px Arial';
+    context.fillText('You Died!', canvas.width / 2 - 70, canvas.height / 2 - 15);
+    context.font = '20px Arial';
+    context.fillText('Press R to respawn', canvas.width / 2 - 85, canvas.height / 2 + 20);
+}
+
+function drawAllPlayers() {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let id in players) {
+        const player = players[id];
+        context.fillStyle = player.color;
+        context.fillRect(player.x, player.y, 50, 50);
     }
 
-    if (isColliding(dino, obstacle)) {
-        endGame();
-    }
+    bullets.forEach(bullet => {
+        context.fillStyle = 'black';
+        context.beginPath();
+        context.arc(bullet.x, bullet.y, 5, 0, 2 * Math.PI);
+        context.fill();
+    });
 }
 
-function isColliding(div1, div2) {
-    const dinoRect = div1.getBoundingClientRect();
-    const obstacleRect = div2.getBoundingClientRect();
-
-    return !(dinoRect.top > obstacleRect.bottom ||
-        dinoRect.bottom < obstacleRect.top ||
-        dinoRect.right < obstacleRect.left ||
-        dinoRect.left > obstacleRect.right);
+function init() {
+    drawAllPlayers();
+    update();
 }
 
-function endGame() {
-    alert('Game Over! Reload to play again.');
-    clearInterval(obstacleInterval);
-}
-
-obstacleInterval = setInterval(moveObstacle, 5);
+init();
